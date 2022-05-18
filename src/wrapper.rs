@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 
 pub struct Wrapper{
     pub(crate) pins: AtomicI32,
-    pub(crate) pos: f32,
+    pub(crate) pos: u64,
     pub(crate) pinned: bool,
     pub(crate) value: *mut (),
 }
@@ -14,7 +14,7 @@ impl Wrapper{
             Self{
                 value: ptr as *mut  (),
                 pins: AtomicI32::new(0),
-                pos: 0.0,
+                pos: 0,
                 pinned: false
             }
         );

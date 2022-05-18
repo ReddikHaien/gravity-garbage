@@ -16,7 +16,7 @@ pub fn main(){
         a: Pointer::default()
     });
 
-    for _ in 0..1000{
+    for _ in 0..10_000{
         let mut new = interface.make_tracked(A{
             a: Pointer::default(),
         });
@@ -34,4 +34,8 @@ pub fn main(){
     
     println!("Trykk enter igjen for å avslutte");
     let _ = stdin().read_line(&mut out);
+
+    unsafe{
+        interface.terminate();
+    }
 }
