@@ -8,8 +8,22 @@ pub struct GarbageObject{
     pins: AtomicU32
 }
 
+unsafe impl Send for GarbageObject{}
+
 impl GarbageObject{
-        pub(crate) fn pin(&self){
+    
+    pub(crate) unsafe fn new_from<T: Traceable + Sized + 'static>(value: T) -> *mut Self{
+        let data = Box::new(Cell::new(value));
+        Box::into_raw(Box::new(
+            Self{
+                data,
+                position: 0,
+                pins: AtomicU32::new(0)
+            }
+        )) 
+    }
+    
+    pub(crate) fn pin(&self){
         self.pins.fetch_add(1, Ordering::SeqCst);
     }
 
@@ -42,5 +56,5 @@ pub trait Traceable{
     unsafe fn get_pointers(&self) -> Vec<RawPointer>;
 
     fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&self) -> &mut dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }

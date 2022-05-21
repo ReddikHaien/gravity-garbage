@@ -9,7 +9,7 @@ mod pointer;
 mod wrapper;
 pub mod macros;
 
-mod v2;
+pub mod v2;
 
 //Helper macros
 macro_rules! read {
