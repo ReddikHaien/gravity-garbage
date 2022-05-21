@@ -1,9 +1,5 @@
-use std::{thread, time::Duration, io::stdin, process::exit};
-
-use gravity_garbage::{MemoryInterface, Pointer, PinnedPointer, set_field};
-
 mod v2_test{
-    use std::{thread, time::Duration};
+    use std::{thread, time::Duration, mem::size_of};
 
     use gravity_garbage::v2::{PinnedPointer, Pointer, MemoryInterface, Traceable, RawPointer};
     struct A{
@@ -38,13 +34,26 @@ mod v2_test{
             next: Pointer::default()
         });
 
+        println!("size of        pointer to          A: {}", size_of::<Pointer<A>>());
+        println!("size of pinned pointer to          A: {}", size_of::<PinnedPointer<A>>());
+        println!("size of    raw pointer to          A: {}", size_of::<RawPointer>());
+        println!("size of        pointer to [usize;16]: {}", size_of::<Pointer<[usize;16]>>());
+        println!("size of pinned pointer to [usize;16]: {}", size_of::<PinnedPointer<[usize;16]>>());
+        println!("size of    raw pointer to [usize;16]: {}", size_of::<RawPointer>());
+
+
         for _ in 0..2{
             let new = interface.track(A{
                 next: cur.clone_unpinned()
             });
-            let new2 = interface.track(A{
+            
+
+            //This object will be unpinned at the end of the loop
+            //Inefficient, just for demostration purposes
+            let _ = interface.track(A{
                 next: cur.clone_unpinned()
             });
+
             cur = new.clone_pinned();
         }
         thread::sleep(Duration::from_secs(15));
@@ -53,41 +62,7 @@ mod v2_test{
     }
 }
 
-
-struct A{
-    a: Pointer<A>
-}
-
 pub fn main(){
 
     v2_test::run();
-
-    // let interface = MemoryInterface::initialize_manager();
-    
-    // let mut cur = interface.make_tracked(A{
-    //     a: Pointer::default()
-    // });
-
-    // for _ in 0..10_000{
-    //     let mut new = interface.make_tracked(A{
-    //         a: Pointer::default(),
-    //     });
-    //     set_field!(interface, new.a = cur);
-
-    //     cur = new.clone_pinned();
-    // }
-
-    // println!("Ferdig med lenke");
-    // let mut out = String::new();
-    // let _ = stdin().read_line(&mut out);    
-
-
-    // cur = PinnedPointer::default();
-    
-    // println!("Trykk enter igjen for å avslutte");
-    // let _ = stdin().read_line(&mut out);
-
-    // unsafe{
-    //     interface.terminate();
-    // }
 }
