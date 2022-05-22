@@ -34,31 +34,19 @@ mod v2_test{
             next: Pointer::default()
         });
 
-        println!("size of        pointer to          A: {}", size_of::<Pointer<A>>());
-        println!("size of pinned pointer to          A: {}", size_of::<PinnedPointer<A>>());
-        println!("size of    raw pointer to          A: {}", size_of::<RawPointer>());
-        println!("size of        pointer to [usize;16]: {}", size_of::<Pointer<[usize;16]>>());
-        println!("size of pinned pointer to [usize;16]: {}", size_of::<PinnedPointer<[usize;16]>>());
-        println!("size of    raw pointer to [usize;16]: {}", size_of::<RawPointer>());
-
-
-        for _ in 0..2{
+        for _ in 0..5{
             let new = interface.track(A{
                 next: cur.clone_unpinned()
             });
-            
-
-            //This object will be unpinned at the end of the loop
-            //Inefficient, just for demostration purposes
             let _ = interface.track(A{
-                next: cur.clone_unpinned()
+                next: Pointer::default()
             });
 
             cur = new.clone_pinned();
         }
-        thread::sleep(Duration::from_secs(15));
+        thread::sleep(Duration::from_secs(10));
         drop(cur);
-        thread::sleep(Duration::from_secs(60));
+        thread::sleep(Duration::from_secs(20));
     }
 }
 
