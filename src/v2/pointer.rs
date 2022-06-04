@@ -158,8 +158,8 @@ impl<T> Clone for PinnedPointer<T> {
             }
         }
         Self {
-            inner: self.inner.clone(),
-            marker: self.marker.clone(),
+            inner: self.inner,
+            marker: PhantomData,
         }
     }
 }
