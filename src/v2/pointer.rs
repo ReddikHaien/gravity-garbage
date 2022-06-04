@@ -171,6 +171,10 @@ pub struct RawPointer {
     data: *mut GarbageObject,
 }
 
+unsafe impl Send for RawPointer{}
+
+unsafe impl Sync for RawPointer{}
+
 impl RawPointer {
     fn is_null(&self) -> bool {
         self.data.is_null()
