@@ -119,7 +119,7 @@ macro_rules! common_impl {
     };
 }
 
-
+#[derive(Clone)]
 pub struct Pointer<T: 'static>{
     inner: RawPointer,
     marker: PhantomData<T>
@@ -163,6 +163,17 @@ impl<T> Drop for PinnedPointer<T>{
         if !self.inner.is_null(){
             unsafe { self.inner.unpin(); }
         }
+    }
+}
+
+impl<T> Clone for PinnedPointer<T>{
+    fn clone(&self) -> Self {
+        if !self.inner.is_null(){
+            unsafe{
+                self.inner.pin();
+            }
+        }
+        Self { inner: self.inner.clone(), marker: self.marker.clone() }
     }
 }
 
