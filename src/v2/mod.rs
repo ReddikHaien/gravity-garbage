@@ -1,7 +1,6 @@
-
-pub use pointer::{PinnedPointer,Pointer, RawPointer};
 pub use collector::MemoryInterface;
-pub use object::Traceable; 
+pub use object::Traceable;
+pub use pointer::{PinnedPointer, Pointer, RawPointer};
 
 mod collector;
 mod object;

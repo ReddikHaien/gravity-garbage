@@ -1,12 +1,12 @@
-mod v2_test{
-    use std::{thread, time::Duration, mem::size_of};
+mod v2_test {
+    use std::{mem::size_of, thread, time::Duration};
 
-    use gravity_garbage::v2::{PinnedPointer, Pointer, MemoryInterface, Traceable, RawPointer};
-    struct A{
-        next: Pointer<A>
+    use gravity_garbage::v2::{MemoryInterface, PinnedPointer, Pointer, RawPointer, Traceable};
+    struct A {
+        next: Pointer<A>,
     }
 
-    impl Drop for A{
+    impl Drop for A {
         fn drop(&mut self) {
             println!("dropped!!");
         }
@@ -14,9 +14,7 @@ mod v2_test{
 
     impl Traceable for A {
         unsafe fn get_pointers(&self) -> Vec<RawPointer> {
-            vec![
-                self.next.clone_raw()
-            ]
+            vec![self.next.clone_raw()]
         }
 
         fn as_any(&self) -> &dyn std::any::Any {
@@ -28,18 +26,18 @@ mod v2_test{
         }
     }
 
-    pub fn run(){
+    pub fn run() {
         let interface = MemoryInterface::create_collector();
-        let mut cur = interface.track(A{
-            next: Pointer::default()
+        let mut cur = interface.track(A {
+            next: Pointer::default(),
         });
 
-        for _ in 0..5{
-            let new = interface.track(A{
-                next: cur.clone_unpinned()
+        for _ in 0..5 {
+            let new = interface.track(A {
+                next: cur.clone_unpinned(),
             });
-            let _ = interface.track(A{
-                next: Pointer::default()
+            let _ = interface.track(A {
+                next: Pointer::default(),
             });
 
             cur = new.clone_pinned();
@@ -50,7 +48,6 @@ mod v2_test{
     }
 }
 
-pub fn main(){
-
+pub fn main() {
     v2_test::run();
 }

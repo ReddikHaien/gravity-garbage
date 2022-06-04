@@ -1,19 +1,23 @@
-use std::{ops::{Deref, DerefMut}, marker::PhantomData, fmt::Debug};
+use std::{
+    fmt::Debug,
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+};
 
 use crate::wrapper::Wrapper;
 
 macro_rules! common_impl {
     ($name:ident) => {
-        impl<T> Default for $name<T>{
+        impl<T> Default for $name<T> {
             fn default() -> Self {
-                Self { 
+                Self {
                     value: std::ptr::null_mut(),
-                    marker: PhantomData
+                    marker: PhantomData,
                 }
             }
         }
 
-        impl<T> Deref for $name<T>{
+        impl<T> Deref for $name<T> {
             type Target = T;
 
             fn deref(&self) -> &Self::Target {
@@ -21,137 +25,138 @@ macro_rules! common_impl {
             }
         }
 
-        impl<T> DerefMut for $name<T>{
+        impl<T> DerefMut for $name<T> {
             fn deref_mut(&mut self) -> &mut Self::Target {
-                unsafe{ self.value.as_mut().unwrap() }.deref_as_mut()
+                unsafe { self.value.as_mut().unwrap() }.deref_as_mut()
             }
         }
 
-        impl<T> $name<T>{
-            pub fn has_value(&self) -> bool{
+        impl<T> $name<T> {
+            pub fn has_value(&self) -> bool {
                 !self.value.is_null()
             }
-        
-            pub fn try_deref(&self) -> Option<&T>{
-                if self.value.is_null(){
+
+            pub fn try_deref(&self) -> Option<&T> {
+                if self.value.is_null() {
                     None
-                }
-                else {
+                } else {
                     Some(self.deref())
                 }
             }
-        
-            pub fn try_deref_mut(&self) -> Option<&T>{
-                if self.value.is_null(){
+
+            pub fn try_deref_mut(&self) -> Option<&T> {
+                if self.value.is_null() {
                     None
-                }
-                else {
+                } else {
                     Some(self.deref())
                 }
             }
-        
+
             /// Creates a new unpinned pointer to the memory adress
-            pub fn clone_unpinned(&self) -> Pointer<T>{
-                Pointer{
+            pub fn clone_unpinned(&self) -> Pointer<T> {
+                Pointer {
                     value: self.value,
-                    marker: PhantomData
+                    marker: PhantomData,
                 }
             }
-        
+
             /// Creates a new pinned pointer to the memory adress
-            pub fn clone_pinned(&self) -> PinnedPointer<T>{
-                if !self.value.is_null(){
-                    unsafe{ self.value.as_ref().unwrap() }.pin();
+            pub fn clone_pinned(&self) -> PinnedPointer<T> {
+                if !self.value.is_null() {
+                    unsafe { self.value.as_ref().unwrap() }.pin();
                 }
-                PinnedPointer{
+                PinnedPointer {
                     value: self.value,
-                    marker: PhantomData
+                    marker: PhantomData,
                 }
             }
-        
+
             #[doc(hidden)]
-            pub fn clone_transfer(&self) -> TransferObject{
-                TransferObject{
-                    value: self.value
-                }
+            pub fn clone_transfer(&self) -> TransferObject {
+                TransferObject { value: self.value }
             }
         }
     };
 }
 
-
-pub struct Pointer<T>{
+pub struct Pointer<T> {
     value: *mut Wrapper,
-    marker: PhantomData<T>
+    marker: PhantomData<T>,
 }
 
 common_impl!(Pointer);
 
-impl<T: Debug> Debug for Pointer<T>{
+impl<T: Debug> Debug for Pointer<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        
-        if self.value.is_null(){
+        if self.value.is_null() {
             f.write_str("null")
-        }
-        else{
+        } else {
             f.write_str("(")?;
-            f.write_fmt(format_args!("{}",unsafe{self.value.as_ref().unwrap()}.get_pins()))?;
+            f.write_fmt(format_args!(
+                "{}",
+                unsafe { self.value.as_ref().unwrap() }.get_pins()
+            ))?;
             f.write_str("): ").unwrap();
-            f.write_fmt( format_args!("{:#?}",unsafe{self.value.as_ref().unwrap()}.deref_as::<T>()) )
+            f.write_fmt(format_args!(
+                "{:#?}",
+                unsafe { self.value.as_ref().unwrap() }.deref_as::<T>()
+            ))
         }
-        
     }
 }
 
-pub struct PinnedPointer<T>{
+pub struct PinnedPointer<T> {
     value: *mut Wrapper,
-    marker: PhantomData<T>
+    marker: PhantomData<T>,
 }
 
 common_impl!(PinnedPointer);
 
-impl<T> Drop for PinnedPointer<T>{
+impl<T> Drop for PinnedPointer<T> {
     fn drop(&mut self) {
-        if !self.value.is_null(){
-            unsafe{ self.value.as_ref().unwrap() }.unpin();
+        if !self.value.is_null() {
+            unsafe { self.value.as_ref().unwrap() }.unpin();
         }
     }
 }
 
-impl<T> PinnedPointer<T>{
-
-    pub(crate) fn new_from(value: *mut Wrapper) -> Self{
-        unsafe{value.as_ref().unwrap().pin()};
-        Self{
+impl<T> PinnedPointer<T> {
+    pub(crate) fn new_from(value: *mut Wrapper) -> Self {
+        unsafe { value.as_ref().unwrap().pin() };
+        Self {
             value,
-            marker: PhantomData
+            marker: PhantomData,
         }
     }
 }
 
-impl<T: Debug> Debug for PinnedPointer<T>{
+impl<T: Debug> Debug for PinnedPointer<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        
-        if self.value.is_null(){
+        if self.value.is_null() {
             f.write_str("pinned: null")
-        }
-        else{
+        } else {
             f.write_str("pinned(")?;
-            f.write_fmt(format_args!("{}",unsafe{self.value.as_ref().unwrap()}.get_pins()))?;
+            f.write_fmt(format_args!(
+                "{}",
+                unsafe { self.value.as_ref().unwrap() }.get_pins()
+            ))?;
             f.write_str("): ").unwrap();
-            f.write_fmt( format_args!("{:#?}",unsafe{self.value.as_ref().unwrap()}.deref_as::<T>()) )
+            f.write_fmt(format_args!(
+                "{:#?}",
+                unsafe { self.value.as_ref().unwrap() }.deref_as::<T>()
+            ))
         }
     }
 }
 
 #[doc(hidden)]
-pub struct TransferObject{
+pub struct TransferObject {
     #[doc(hidden)]
-    value: *mut Wrapper
+    value: *mut Wrapper,
 }
 
-impl TransferObject{
-    pub(crate) fn unwrap(self) -> *mut Wrapper{
+impl TransferObject {
+    pub(crate) fn unwrap(self) -> *mut Wrapper {
         self.value
     }
 }
