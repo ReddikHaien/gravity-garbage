@@ -117,13 +117,6 @@ impl Collector {
                 }
             }
         }
-
-        println!(
-            "max height {}, objects {}, time used {}ms",
-            max,
-            self.objects.len(),
-            timer.elapsed().as_millis()
-        );
     }
 }
 
