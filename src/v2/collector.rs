@@ -128,6 +128,7 @@ pub enum MemoryMessage {
 unsafe impl Send for MemoryMessage {}
 unsafe impl Sync for MemoryMessage {}
 
+#[derive(Clone)]
 pub struct MemoryInterface {
     sender: Sender<MemoryMessage>,
 }
