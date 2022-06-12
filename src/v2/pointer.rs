@@ -76,6 +76,12 @@ macro_rules! common_impl {
                 }
             }
 
+            pub fn ptr_eq(&self, rhs: &dyn HasRawPointer) -> bool{
+                unsafe{
+                    std::ptr::eq(self.inner.data_pnt(), rhs.get_raw_pointer())
+                }
+            }
+
             pub unsafe fn clone_raw(&self) -> RawPointer {
                 self.inner.clone()
             }
@@ -100,6 +106,14 @@ macro_rules! common_impl {
                     f.write_str("null")
                 } else {
                     f.write_fmt(format_args!("{}", unsafe { self.inner.get_ref::<T>() }))
+                }
+            }
+        }
+        
+        impl<T> HasRawPointer for $name<T>{
+            fn get_raw_pointer(&self) -> *mut GarbageObject{
+                unsafe{
+                    self.inner.data_pnt()
                 }
             }
         }
@@ -203,4 +217,8 @@ impl RawPointer {
     unsafe fn unpin(&self) {
         self.data_mut().unpin();
     }
+}
+
+pub trait HasRawPointer {
+    fn get_raw_pointer(&self) -> *mut GarbageObject;
 }
