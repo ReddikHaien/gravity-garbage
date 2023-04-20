@@ -1,216 +1,205 @@
-use std::{
-    alloc::Layout,
-    f32::consts::E,
-    mem::{align_of, size_of},
-    sync::{
-        atomic::Ordering,
-        mpsc::{self, Sender},
-    },
-    thread,
-};
+mod mem_block;
 
-use pointer::TransferObject;
-pub use pointer::{PinnedPointer, Pointer};
+use std::{sync::{Arc, atomic::{AtomicU32, AtomicU8, Ordering, fence}, Weak, Once}, ops::Deref, mem::MaybeUninit, time::Duration};
 
-use wrapper::Wrapper;
-
-pub mod macros;
-mod pointer;
-mod wrapper;
-
-pub mod v2;
-
-//Helper macros
-macro_rules! read {
-    ($x:expr) => {
-        unsafe { $x.as_ref().unwrap() }
-    };
+pub trait Traceable{
+    fn trace(&self);
 }
 
-macro_rules! write {
-    ($x:expr) => {
-        unsafe { $x.as_mut().unwrap() }
-    };
+#[repr(C)]
+struct Data<Q: Traceable + ?Sized>{
+    pins: AtomicU32,
+    pos: AtomicU8,
+    payload: Q
 }
 
-macro_rules! to_usize {
-    ($x:expr) => {
-        unsafe { std::mem::transmute::<_, usize>($x) }
-    };
-}
-
-struct MemoryManager {
-    objects: Vec<*mut Wrapper>,
-    connections: Vec<(*mut Wrapper, *mut Wrapper)>,
-}
-
-impl MemoryManager {
-    fn new() -> Self {
-        Self {
-            objects: Vec::new(),
-            connections: Vec::new(),
-        }
-    }
-
-    fn make_tracked(&mut self, value: *mut Wrapper) {
-        if value.is_null() || read!(value).value.is_null() {
-            return;
-        }
-        self.objects.push(value)
-    }
-
-    fn create_connection(&mut self, from: *mut Wrapper, to: *mut Wrapper) {
-        if from.is_null()
-            || read!(from).value.is_null()
-            || to.is_null()
-            || read!(to).value.is_null()
-        {
-            return;
-        }
-        self.connections.push((from, to));
-    }
-
-    fn remove_connection(&mut self, from: *mut Wrapper, to: *mut Wrapper) {
-        self.connections
-            .retain(|x| to_usize!(x.0) != to_usize!(from) || to_usize!(x.1) != to_usize!(to));
-    }
-
-    fn update(&mut self) {
-        let mut pinned = 0;
-
-        //Apply the gravity
-        for x in self.objects.iter() {
-            //Pinned objects are teleported up to 0
-            if read!(x).get_pins() > 0 {
-                write!(x).pos = 0;
-                write!(x).pinned = true;
-                pinned += 1;
-            }
-            //Everything else is moved down by 1
-            else {
-                let old = read!(x).pos;
-                write!(x).pos = old + 1;
-                write!(x).pinned = false;
-            }
-        }
-
-        //If everything is pinned, don't bother with checking the connections
-        if pinned == self.objects.len() {
-            return;
-        }
-
-        //Sorting the array based on wether a connection is pinned or not
-        self.connections
-            .sort_by(|a, b| read!(a.1).pos.cmp(&read!(b.1).pos));
-
-        //connections
-        for (from, to) in self.connections.iter() {
-            //Pick the shortest distance between the referee: from, and the referent: to
-            let a = read!(from).pos;
-            let b = read!(to).pos;
-
-            //move to the highest point
-            let mov = a.min(b);
-
-            //If the parent is pinned, both objects are moved up to the top
-            if read!(from).pinned {
-                write!(to).pos = 0;
-            } else if !read!(to).pinned {
-                //if neither are pinned, move to up to the shortest distance, this means that it won't be moved if its already higher up than the referee
-                write!(to).pos = mov;
-            }
-        }
-
-        //The garbage collection
-
-        let l = self.objects.len();
-        let death_zone = l.max(100) as u64 + 2;
-
-        for x in (0..l).rev() {
-            if read!(self.objects[x]).pos > death_zone {
-                let v = self.objects.swap_remove(x);
-
-                //Removes every connection that the dead object contains in the list
-                //We do this, beacuse, if the object if there is other referenses to it, their not referenced by the program any more
-
-                self.connections.retain(|(a, b)| {
-                    to_usize!(*a) != to_usize!(v) && to_usize!(*b) != to_usize!(v)
-                });
-
-                unsafe {
-                    Box::from_raw(v);
-                };
-            }
-        }
+impl<Q: Traceable + ?Sized> Drop for Data<Q>{
+    fn drop(&mut self) {
+        println!("Dropping value");
     }
 }
 
-enum MemoryMessages {
-    Track(*mut Wrapper),
-    Connect(*mut Wrapper, *mut Wrapper),
-    DisConnect(*mut Wrapper, *mut Wrapper),
-    Exit,
+struct InnerPtr<Q: Traceable + ?Sized>(Arc<Data<Q>>);
+
+impl<Q: Traceable + Sized + 'static> InnerPtr<Q> {
+    pub fn new(data: Q) -> Self{
+        Self(Arc::new(Data{
+            pins: AtomicU32::new(0),
+            pos: AtomicU8::new(0),
+            payload: data
+        }))
+    }
+
+    fn to_dyn(self) -> InnerPtr<dyn Traceable>{
+        let inner: Arc<Data<dyn Traceable>> = self.0;
+        InnerPtr(inner)
+    }
 }
 
-unsafe impl Send for MemoryMessages {}
-
-pub struct MemoryInterface {
-    tsc: Sender<MemoryMessages>,
+impl<Q: Traceable + ?Sized> Clone for InnerPtr<Q>{
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
 }
 
-impl MemoryInterface {
-    pub fn initialize_manager() -> Self {
-        let (tsc, rcv) = mpsc::channel();
+impl<Q: Traceable + ?Sized> InnerPtr<Q> {
 
-        thread::spawn(move || {
-            let mut manager = MemoryManager::new();
+    fn get_pins(&self) -> u32{
+        self.0.pins.load(Ordering::Acquire)
+    }
 
-            'outer: loop {
-                while let Ok(message) = rcv.try_recv() {
-                    match message {
-                        MemoryMessages::Track(object) => {
-                            manager.make_tracked(object);
-                        }
-                        MemoryMessages::Connect(from, to) => {
-                            manager.create_connection(from, to);
-                        }
-                        MemoryMessages::DisConnect(from, to) => {
-                            manager.remove_connection(from, to);
-                        }
-                        MemoryMessages::Exit => {
-                            break 'outer;
-                        }
-                    }
-                }
+    fn get_pos(&self) -> u8{
+        self.0.pos.load(Ordering::Acquire)
+    }
 
-                manager.update();
-            }
+    fn tag(&self){
+        if self.0.pos.swap(0, Ordering::Release) > 0{
+            fence(Ordering::Acquire);
+            self.0.payload.trace();
+        }
+    }
 
-            println!("garbage thread stopped");
+    fn move_up(&self){
+        self.0.pos.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn pin(&self){
+        self.0.pins.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn unpin(&self){
+        self.0.pins.fetch_sub(1, Ordering::Relaxed);
+    }
+
+    fn payload(&self) -> &Q{
+        &self.0.payload
+    }
+}
+
+pub struct Ptr<Q: Traceable + ?Sized>(InnerPtr<Q>);
+
+impl<Q: Traceable + ?Sized> Ptr<Q>{
+    fn from_inner(inner: InnerPtr<Q>) -> Self{
+        Self(inner)
+    }
+    pub fn into_pinned(self) -> PinPtr<Q> {
+        PinPtr::from_inner(self.0)
+    }
+}
+
+impl<Q: Traceable + ?Sized> Clone for Ptr<Q>{
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<Q: Traceable + ?Sized> Deref for Ptr<Q>{
+    type Target = Q;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.payload()
+    }
+}
+
+pub struct PinPtr<Q: Traceable + ?Sized>(InnerPtr<Q>);
+
+impl<Q: Traceable + Sized + 'static> PinPtr<Q>{
+    pub fn new(data: Q) -> Self{
+        with_sink(move |sink|{
+            let inner = InnerPtr::new(data);
+            let p = Self::from_inner(inner.clone());    
+            sink.push(inner.to_dyn());
+            p
+        })
+    }
+}
+
+impl<Q: Traceable + ?Sized> PinPtr<Q>{
+    fn from_inner(inner: InnerPtr<Q>) -> Self{
+        inner.pin();
+        Self(inner)
+    }
+
+    pub fn reference(&self) -> Ptr<Q>{
+        Ptr::from_inner(self.0.clone())
+    }
+}
+
+impl<Q: Traceable + ?Sized> Deref for PinPtr<Q>{
+    type Target = Q;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.payload()
+    }
+}
+
+impl<Q: Traceable + ?Sized> Clone for PinPtr<Q> {
+    fn clone(&self) -> Self {
+        let copy = self.0.clone();
+        copy.pin();
+        Self(copy)
+    }
+}
+
+impl<Q: Traceable + ?Sized> Drop for PinPtr<Q> {
+    fn drop(&mut self) {
+        self.0.unpin();
+    }
+}
+
+fn with_sink<F, Q>(f: F) -> Q
+    where F: FnOnce(&mut Vec<InnerPtr<dyn Traceable>>) -> Q
+{
+    
+    static mut SINK: MaybeUninit<Vec<InnerPtr<dyn Traceable>>> = MaybeUninit::uninit();
+    static ONCE: Once = Once::new();
+    unsafe{
+        ONCE.call_once(||{
+            SINK = MaybeUninit::new(vec![]);
         });
 
-        Self { tsc }
+        let sink = SINK.assume_init_mut();
+        f(sink)
     }
+}
 
-    pub fn connect(&self, from: TransferObject, to: TransferObject) {
-        self.tsc
-            .send(MemoryMessages::Connect(from.unwrap(), to.unwrap()))
-            .unwrap();
-    }
+pub fn start_memory_manager() -> std::thread::JoinHandle<()> {
+    std::thread::spawn(||{
+        let mut objects = Vec::new();
+        loop {
+            std::thread::sleep(Duration::from_millis(20));
+            
+            //Collect new objects
+            let new = with_sink(|sink|{
+                if !sink.is_empty()
+                {
+                    Some(std::mem::take(sink))
+                }
+                else{
+                    None
+                }
+            });
 
-    pub fn make_tracked<T>(&self, value: T) -> PinnedPointer<T> {
-        let ptr = unsafe { Wrapper::from_inner(value) };
-        self.tsc.send(MemoryMessages::Track(ptr)).unwrap();
-        PinnedPointer::new_from(ptr)
-    }
+            if let Some(new) = new{
+                objects.extend(new);
+            }
 
-    pub fn disconnect(&self, from: TransferObject, to: TransferObject) {
-        self.tsc
-            .send(MemoryMessages::DisConnect(from.unwrap(), to.unwrap()))
-            .unwrap();
-    }
+            //Tag referenced objects
+            objects.iter().for_each(|x|{
+                let pin = x.get_pins();
+                if pin > 0{
+                    x.tag();
+                }
+                else{
+                    x.move_up()
+                }
+            });
 
-    pub unsafe fn terminate(self) {
-        self.tsc.send(MemoryMessages::Exit).unwrap();
-    }
+            //Kill objects past treshold
+            objects.retain_mut(|object|{
+                object.get_pos() < 10
+            });
+
+        }
+    })
 }
