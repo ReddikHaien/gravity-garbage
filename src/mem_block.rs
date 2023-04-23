@@ -27,7 +27,7 @@ pub struct Ptr<Q: ?Sized>{
 }
 
 unsafe impl<Q: ?Sized + Send> Send for Ptr<Q> {}
-unsafe impl<Q: ?Sized + Send> Sync for Ptr<Q> {}
+unsafe impl<Q: ?Sized + Sync> Sync for Ptr<Q> {}
 
 impl<T: ?Sized + Unsize<U>, U: ?Sized> CoerceUnsized<Ptr<U>> for Ptr<T> {}
 

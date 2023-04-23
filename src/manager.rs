@@ -18,12 +18,12 @@ impl Manager{
 
     pub fn run(mut self){
 
-        let mut timer = Instant::now();
-
         thread::spawn(move ||{
             
             loop {
                 
+                thread::sleep(Duration::from_millis(20));
+
                 //Collecting new objects
                 with_sink(|sink|{
                     let l = sink.len();
@@ -59,19 +59,6 @@ impl Manager{
                         true
                     }
                 });
-
-                if timer.elapsed() > Duration::from_secs(1){
-
-                    print!("|num objs: {}|",self.objects.len());
-
-                    let pos = self.objects.iter().map(|x| x.get_pos()).max();
-                    if let Some(pos) = pos{
-                        print!("max pos {}|",pos);
-                    }
-                    
-                    println!("");
-                    timer = Instant::now();
-                }
             }
         });
     }
