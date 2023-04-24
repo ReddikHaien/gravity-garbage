@@ -1,6 +1,6 @@
-use std::{sync::{RwLock, Mutex}, ops::Deref};
+use std::{sync::{RwLock, Mutex}};
 
-use crate::prelude::{TracingContext, Ptr};
+use crate::prelude::{TracingContext};
 
 pub trait Traceable: Send + Sync{
     fn trace(&self, ctx: &mut TracingContext);

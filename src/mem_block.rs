@@ -1,4 +1,4 @@
-use std::{ptr::NonNull, sync::atomic::{AtomicU32, Ordering, fence, AtomicBool, AtomicI8, AtomicU8}, marker::{PhantomData, Unsize}, ops::{DispatchFromDyn, CoerceUnsized, Deref, DerefMut}, thread};
+use std::{ptr::NonNull, sync::atomic::{AtomicU32, Ordering, fence, AtomicBool, AtomicU8}, marker::{PhantomData, Unsize}, ops::{DispatchFromDyn, CoerceUnsized, Deref, DerefMut}, thread};
 
 use crate::prelude::{Traceable, with_sink, TracingContext};
 
