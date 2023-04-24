@@ -1,43 +1,45 @@
 use std::{sync::{RwLock, Mutex}, ops::Deref};
 
+use crate::prelude::{TracingContext, Ptr};
+
 pub trait Traceable: Send + Sync{
-    fn trace(&self);
+    fn trace(&self, ctx: &mut TracingContext);
 }
 
 impl<Q: Traceable> Traceable for Option<Q>{
-    fn trace(&self) {
+    fn trace(&self, ctx: &mut TracingContext) {
         if let Some(ref inner) = self{
-            inner.trace();
+            inner.trace(ctx);
         }
     }
 }
 
 impl<Q: Traceable> Traceable for Box<Q>{
-    fn trace(&self) {
-        self.as_ref().trace();
+    fn trace(&self, ctx: &mut TracingContext) {
+        self.as_ref().trace(ctx);
     }
 }
 
 impl<Q: Traceable> Traceable for [Q]{
-    fn trace(&self) {
+    fn trace(&self, ctx: &mut TracingContext) {
         for v in self{
-            v.trace();
+            v.trace(ctx);
         }
     }
 }
 
 impl<Q: Traceable> Traceable for RwLock<Q>{
-    fn trace(&self) {
+    fn trace(&self, ctx: &mut TracingContext) {
         if let Ok(lock) = self.read(){
-            lock.trace();
+            lock.trace(ctx);
         }
     }
 }
 
 impl<Q: Traceable> Traceable for Mutex<Q>{
-    fn trace(&self) {
+    fn trace(&self, ctx: &mut TracingContext) {
         if let Ok(lock) = self.lock(){
-            lock.trace();
+            lock.trace(ctx);
         }
     }
 }

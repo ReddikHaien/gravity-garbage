@@ -1,9 +1,27 @@
-use std::{ptr::{NonNull, drop_in_place}, mem::MaybeUninit, thread, sync::{Mutex, Once}, alloc::{Global, Allocator, Layout}, time::{Instant, Duration}};
+use std::{ptr::{NonNull, drop_in_place}, mem::MaybeUninit, thread, sync::{Mutex, Once}, alloc::{Global, Allocator, Layout}, time::{Instant, Duration}, collections::VecDeque};
 
 use crate::{mem_block::Ptr, prelude::Traceable};
 
-const NUM_GENS: usize = 3;
 
+pub struct TracingContext{
+    objects: VecDeque<Ptr<dyn Traceable>>
+}
+
+impl TracingContext{
+    fn new() -> Self{
+        Self{
+            objects: VecDeque::new()
+        }
+    }
+
+    pub fn trace(&mut self, ptr: Ptr<dyn Traceable>){
+        self.objects.push_back(ptr);
+    }
+
+    fn get_object(&mut self) -> Option<Ptr<dyn Traceable>>{
+        self.objects.pop_front()
+    }
+}
 
 pub struct Manager{
     objects: Vec<Ptr<dyn Traceable>>
@@ -32,16 +50,24 @@ impl Manager{
                     }
                 });
 
+                //Let everyone fall down one step.
                 self.objects.iter().for_each(|ptr|{
                     ptr.move_up();
                 });
 
-                //Mark
+                let mut context = TracingContext::new();
+
+                //Mark roots
                 self.objects.iter().for_each(|ptr|{
                     if ptr.get_pins() > 0{
-                        ptr.trace();
+                        ptr.trace(&mut context);
                     }
                 });
+
+                //Mark remaining objects in context
+                while let Some(ptr) = context.get_object() {
+                    ptr.trace(&mut context);
+                }
 
                 //Sweep
                 self.objects.retain(|ptr|{

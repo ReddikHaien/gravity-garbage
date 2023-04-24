@@ -1,6 +1,6 @@
 use std::{ptr::NonNull, sync::atomic::{AtomicU32, Ordering, fence, AtomicBool, AtomicI8, AtomicU8}, marker::{PhantomData, Unsize}, ops::{DispatchFromDyn, CoerceUnsized, Deref, DerefMut}, thread};
 
-use crate::prelude::{Traceable, with_sink};
+use crate::prelude::{Traceable, with_sink, TracingContext};
 
 #[repr(C)]
 pub struct Data<Q: ?Sized>{
@@ -138,10 +138,11 @@ impl<Q: ?Sized> DerefMut for Ptr<Q>{
 }
 
 impl<Q: ?Sized + Traceable> Traceable for Ptr<Q>{
-    fn trace(&self) {
+    fn trace(&self, ctx: &mut TracingContext) {
+        //If this object is not returned to position 0, call trace on the payload.
         if self.inner().pos.swap(0, Ordering::Relaxed) > 0{
             if !self.inner().trace_lock.swap(true, Ordering::Acquire){
-                self.inner().payload.trace();
+                self.inner().payload.trace(ctx);                
                 self.inner().trace_lock.store(false, Ordering::Relaxed);
             }
         }

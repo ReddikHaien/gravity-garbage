@@ -7,9 +7,9 @@ struct Node{
 }
 
 impl Traceable for Node{
-    fn trace(&self) {
+    fn trace(&self, ctx: &mut TracingContext) {
         if let Some(ref next) = self.next{
-            next.trace();
+            ctx.trace(next.clone())
         }
     }
 }
@@ -23,7 +23,7 @@ fn main(){
         next: None
     });
 
-    for i in 1..100{
+    for i in 1..1000{
         let n = Ptr::new(Node{
             value: i,
             next: Some(root.clone().into_unpinned())
